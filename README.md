@@ -11,6 +11,8 @@ Open the [workspace prototype](docs/workspace-prototype.html) in a browser. It r
 ## Project docs
 
 - [V1 product design](docs/v1-design.md)
+- [Technical specification](docs/technical-spec.md)
+- [First slice specification](docs/first-slice.md)
 - [Workspace design](docs/workspace-design.md)
 - [Design guidelines](DESIGN.md)
 - [Handoff video](docs/workspace-handoff/workspace-handoff.mp4)

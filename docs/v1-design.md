@@ -26,20 +26,21 @@ The initial client is a responsive web app for Mac and phone. It gives you a pla
 
 The workspace design covers Home, effort pages, the task pane, and the approved dark glass treatment. [Workspace design](workspace-design.md)
 
-The client and MCP use the same HTTP API and database. The API handles validation, permissions, and status derivation. You sign in as yourself. Each agent installation has its own revocable credential so its activity can be attributed to it. The API detects stale edits to an effort or task to avoid silently overwriting newer changes. Notes and logs are independent appends.
+The client and agents use the same HTTP API and database through Spring Boot. The API handles validation, permissions, and status derivation. You sign in as yourself. Each agent installation has its own revocable credential so its activity can be attributed to it. The API detects stale edits to an effort or task to avoid silently overwriting newer changes. Notes and logs are independent appends. [Technical specification](technical-spec.md)
 
-## MCP and server-side Code Mode
+## MCP and Code Mode
 
-Codex, Pi, and other MCP-capable harnesses connect to one remote MCP endpoint. The endpoint follows Cloudflare’s server-side Code Mode pattern with two tools. [Cloudflare Code Mode](https://blog.cloudflare.com/code-mode-mcp#server-side-code-mode)
+Codex, Pi, and other MCP-capable harnesses use MCP to discover operations in Working State’s OpenAPI contract, then compose API calls in Code Mode. Cloudflare’s `search` and `execute` model is the reference for server-side execution. The technical specification also covers running the code in the agent’s harness. [Cloudflare Code Mode](https://blog.cloudflare.com/code-mode-mcp/#server-side-code-mode) · [Technical specification](technical-spec.md#mcp-and-code-mode)
 
-- **`search(code)`** runs a query against the app’s OpenAPI contract and returns the relevant operations and request and response schemas.
-- **`execute(code)`** runs agent-written JavaScript in a server-side sandbox. The script uses a scoped client for the task API under the calling agent’s permissions. It can compose several operations in one run and return a concise result.
+For example, a script can find a task by effort and title, update its status, append a note, and return the resulting task ID and status. Spring Boot applies the permissions of the calling agent.
 
-For example, a script can find a task by effort and title, update its status, append a note, and return the resulting task ID and status. The agent performs the underlying work in its usual environment and uses Code Mode to record it in the app.
+## End-to-end scenarios
 
-## First end-to-end test
+The first slice verifies a standalone-task handoff from the browser to an agent over REST and back to the owner’s phone. [First slice specification](first-slice.md)
+
+The full v1 scenario adds an effort and passes work between two agent harnesses.
 
 1. On your phone, create a DNS migration effort with one task, then create a standalone task.
-2. On one computer, have Codex use MCP to find the effort task, mark it **In progress**, and leave a work note.
+2. On one computer, have Codex discover the task operations through MCP and use Code Mode to find the effort task, mark it **In progress**, and leave a work note.
 3. On the other computer, have Pi read the note, mark the task **Done**, and record the outcome.
 4. Reopen the client on your phone and verify that the effort is **Done**, the task activity shows both agents, and the standalone task is still accessible on its own.
