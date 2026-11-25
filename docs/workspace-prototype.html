@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121314">
+<title>Working State</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --rail: #191a1c;
+    --canvas: #121314;
+    --detail: #202123;
+    --workspace-tint: rgb(15 16 17 / 65%);
+    --selected: rgb(233 235 238 / 12%);
+    --hover: rgb(233 235 238 / 7%);
+    --edge: rgb(233 235 238 / 13%);
+    --rim: rgb(240 242 244 / 23%);
+    --control: #606368;
+    --ink: #f1f1ef;
+    --body: #d5d6d8;
+    --muted: #b2b4b8;
+    --working: #dfba72;
+    --nav-width: 216px;
+    --pane-width: min(396px, 35vw);
+    --window-inset: 18px;
+    --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--ink); background: var(--canvas); font: 15px/1.5 "Helvetica Neue", Arial, sans-serif; overflow-x: clip; }
+  body::before {
+    content: ""; position: fixed; z-index: -1; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse at 75% -15%, rgb(153 155 158 / 55%), transparent 61%),
+      linear-gradient(146deg, #151618 10%, #2b2d30 36%, #434548 48%, #222426 61%, #111214 78%, #242527);
+  }
+  a, button { color: inherit; }
+  a { text-decoration: none; }
+  button, input { font: inherit; }
+  button { border: 0; background: transparent; cursor: pointer; }
+  button, a, summary { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2px solid var(--muted); outline-offset: 3px; border-radius: 4px; }
+  ::selection { color: var(--ink); background: var(--control); }
+  [hidden] { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .shell {
+    display: grid; min-height: calc(100dvh - 2 * var(--window-inset)); margin: var(--window-inset);
+    grid-template-columns: var(--nav-width) minmax(0, 1fr); border: 1px solid var(--rim); border-radius: 16px;
+  }
+  .rail {
+    position: sticky; top: var(--window-inset); height: calc(100dvh - 2 * var(--window-inset) - 2px);
+    padding: 24px 14px; background: var(--rail); border-right: 1px solid var(--edge); border-radius: 15px 0 0 15px;
+  }
+  .brand, .nav-link { display: flex; align-items: center; gap: 10px; }
+  .brand { margin: 0 9px 26px; font-weight: 650; letter-spacing: -.015em; }
+  .brand-mark { display: grid; place-content: center; gap: 3px; width: 21px; height: 21px; border: 1px solid var(--control); border-radius: 5px; }
+  .brand-mark::before, .brand-mark::after { content: ""; height: 1px; width: 9px; background: var(--ink); }
+  .brand-mark::after { width: 6px; }
+  .nav-link { min-height: 37px; padding: 7px 9px; border-radius: 5px; color: var(--body); font-size: 14px; }
+  .nav-link[aria-current] { background: var(--selected); color: var(--ink); font-weight: 600; }
+  .nav-label { margin: 24px 9px 5px; color: var(--muted); font-size: 13px; }
+  .nav-icon { display: block; position: relative; width: 13px; height: 13px; flex: none; border: 1px solid var(--muted); border-radius: 3px; }
+  .nav-icon.home { border-radius: 50%; }
+  .nav-icon.home::before { content: ""; position: absolute; inset: 3px; background: var(--muted); border-radius: 50%; }
+  .nav-icon.list::before { content: ""; position: absolute; inset: 3px 2px; border-block: 1px solid var(--muted); }
+  .nav-icon.effort { height: 10px; }
+  .nav-icon.effort::before { content: ""; position: absolute; left: 0; bottom: calc(100% - 1px); width: 5px; height: 3px; border: 1px solid var(--muted); border-radius: 2px 2px 0 0; }
+  main { min-width: 0; background: var(--workspace-tint); border-radius: 0 15px 15px 0; }
+  .home-view { max-width: 620px; margin: 0 auto; padding: clamp(80px, 18vh, 172px) 24px 60px; }
+  h1, h2 { margin: 0; }
+  h1 { font-size: 34px; font-weight: 650; letter-spacing: -.035em; line-height: 1.13; text-wrap: balance; }
+  h2 { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+  .home-view h1 { text-align: center; margin-bottom: 22px; }
+  .search {
+    display: flex; align-items: center; gap: 11px; min-height: 50px; padding: 0 13px;
+    background: var(--detail); border: 1px solid var(--rim); border-top-color: var(--control); border-radius: 9px;
+  }
+  .search:focus-within { border-color: var(--muted); }
+  .search input { min-width: 0; width: 100%; height: 48px; padding: 0; background: none; color: var(--ink); border: 0; outline: 0; font-size: 16px; }
+  .search input::placeholder { color: var(--muted); }
+  .search-icon { position: relative; display: block; flex: none; width: 13px; height: 13px; border: 1.5px solid var(--muted); border-radius: 50%; }
+  .search-icon::after { content: ""; position: absolute; right: -4px; bottom: -2px; width: 5px; height: 1.5px; background: var(--muted); transform: rotate(45deg); }
+  kbd { padding: 1px 6px; min-width: max-content; color: var(--muted); border: 1px solid var(--edge); border-radius: 4px; font: inherit; font-size: 12px; }
+  .home-feed, .search-results { margin-top: 35px; }
+  .section-heading { margin-bottom: 7px; }
+  .flat-list { margin: 0; padding: 0; list-style: none; }
+  .update-row, .result-row, .task-row { display: grid; align-items: center; gap: 11px; width: 100%; padding: 8px 9px; border-bottom: 1px solid var(--edge); border-radius: 3px; min-height: 52px; }
+  .update-row { grid-template-columns: 26px minmax(0, 1fr) auto 12px; }
+  .result-row, .task-row { grid-template-columns: 15px minmax(0, 1fr) auto; }
+  .row-title { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+  .row-meta, .stamp { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .row-meta { display: block; overflow-wrap: anywhere; }
+  .update-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stamp { white-space: nowrap; }
+  .avatar { display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--control); border-radius: 50%; color: var(--body); font-size: 12px; font-weight: 650; }
+  .arrow, .chevron { width: 6px; height: 6px; margin-right: 3px; border: solid var(--muted); border-width: 0 1px 1px 0; transform: rotate(-45deg); }
+  .chevron { display: inline-block; margin-inline: 1px 8px; flex: none; }
+  details[open] > summary .chevron { margin-top: -3px; transform: rotate(45deg); }
+  .search-results h2 { color: var(--body); margin-bottom: 3px; }
+  .search-results section + section { margin-top: 21px; }
+  .empty { color: var(--muted); margin: 12px 0; font-size: 14px; }
+  .effort-view { max-width: 1056px; margin-inline: auto; padding: 46px 43px 48px; }
+  .effort-heading { margin-bottom: 26px; }
+  .effort-heading p { max-width: 64ch; margin: 9px 0 12px; color: var(--body); }
+  .progress { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
+  .progress-track { width: 60px; height: 4px; overflow: hidden; background: var(--control); border-radius: 2px; }
+  .progress-track span { display: block; height: 100%; background: #bbbcbf; }
+  details summary { list-style: none; cursor: pointer; }
+  details summary::-webkit-details-marker { display: none; }
+  .disclosure { display: flex; align-items: center; min-height: 38px; font-size: 14px; font-weight: 600; padding-inline: 7px; }
+  .disclosure .last-task { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 400; max-width: 56%; overflow-wrap: anywhere; text-align: right; }
+  details .update-row { min-height: 46px; padding-block: 5px; }
+  .task-section { margin-top: 25px; }
+  .task-list { border-top: 1px solid var(--edge); }
+  .task-row[aria-current], .update-row[aria-current], .result-row[aria-current] { background: var(--selected); border-color: var(--selected); }
+  .task-state { color: var(--muted); font-size: 13px; }
+  .recent { margin-top: 16px; }
+  .dot { position: relative; display: inline-grid; place-items: center; overflow: hidden; width: 14px; height: 14px; border: 1px solid #929498; border-radius: 50%; flex: none; }
+  .dot.done::after { content: ""; width: 5px; height: 3px; margin-top: -1px; border: solid var(--ink); border-width: 0 0 1px 1px; transform: rotate(-45deg); }
+  .dot.working { border-color: var(--working); }
+  .dot.working::after { content: ""; position: absolute; inset: 0 50% 0 0; background: var(--working); }
+  .pane {
+    position: fixed; z-index: 2; inset: calc(var(--window-inset) + 1px) calc(var(--window-inset) + 1px) calc(var(--window-inset) + 1px) auto;
+    width: var(--pane-width); visibility: hidden; transform: translateX(100%);
+    background: var(--detail); border-left: 1px solid var(--edge); border-radius: 0 15px 15px 0;
+    padding: 22px 24px 36px; overflow-y: auto; overscroll-behavior: contain;
+    transition: transform 200ms var(--ease-drawer), visibility 0s linear 200ms;
+  }
+  body[data-task-open] .pane { visibility: visible; transform: translateX(0); transition-delay: 0s; }
+  body[data-instant] .pane { transition: none; }
+  .pane-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .pane-context { color: var(--muted); font-size: 13px; }
+  .pane-context a { text-decoration: underline; text-underline-offset: 3px; }
+  .close-button { min-width: 32px; min-height: 32px; display: grid; place-items: center; border-radius: 5px; color: var(--body); }
+  .close-icon { position: relative; display: block; width: 12px; height: 12px; }
+  .close-icon::before, .close-icon::after { content: ""; position: absolute; left: 0; top: 5px; width: 12px; height: 1px; background: currentColor; transform: rotate(45deg); }
+  .close-icon::after { transform: rotate(-45deg); }
+  .back-label { display: none; }
+  .task-title { font-size: 26px; font-weight: 650; line-height: 1.17; letter-spacing: -.025em; text-wrap: balance; }
+  .status { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; color: var(--body); font-size: 13px; }
+  .pane-description { margin: 15px 0 24px; color: var(--body); overflow-wrap: anywhere; }
+  .activity { border-top: 1px solid var(--edge); padding-top: 16px; }
+  .activity h2 { margin-bottom: 10px; }
+  .note { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; padding: 8px 0; }
+  .note[data-target] { background: var(--selected); border-radius: 6px; padding-inline: 7px; }
+  .note-meta { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-size: 13px; }
+  .note-meta time { margin-left: auto; }
+  .note p { margin: 4px 0 0; color: var(--body); font-size: 14px; overflow-wrap: anywhere; }
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .rail {
+      background: rgb(16 17 19 / 69%);
+      -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    }
+    .search {
+      background: linear-gradient(180deg, rgb(249 250 251 / 12%), rgb(249 250 251 / 4%));
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    }
+    .pane {
+      background: rgb(21 22 24 / 63%);
+      -webkit-backdrop-filter: blur(28px); backdrop-filter: blur(28px);
+    }
+  }
+  @media (min-width: 950px) {
+    .shell {
+      background: linear-gradient(to right, transparent var(--nav-width), var(--workspace-tint) var(--nav-width)) padding-box;
+    }
+    main, .pane { background: transparent; }
+    .pane { -webkit-backdrop-filter: none; backdrop-filter: none; }
+    body[data-task-open] .shell { padding-right: var(--pane-width); }
+  }
+  @media (max-width: 949px) {
+    :root { --pane-width: min(396px, 43vw); }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .nav-link:hover:not([aria-current]), .close-button:hover, summary:hover,
+    .update-row:hover:not([aria-current]), .result-row:hover:not([aria-current]), .task-row:hover:not([aria-current]) { background: var(--hover); }
+  }
+  @media (max-width: 1050px) {
+    :root { --nav-width: 190px; }
+    .effort-view { padding-inline: 27px; }
+  }
+  @media (max-width: 720px) {
+    :root { --window-inset: 0px; }
+    body[data-task-open] { overflow: hidden; }
+    body[data-task-open] .shell::after { content: ""; position: fixed; inset: 0; z-index: 1; background: rgb(0 0 0 / 32%); }
+    .shell { display: block; border: 0; border-radius: 0; background: rgb(15 16 17 / 58%); }
+    main { background: transparent; border-radius: 0; }
+    .rail { z-index: 1; height: auto; display: flex; align-items: center; gap: 8px; padding: max(9px, env(safe-area-inset-top)) 11px 8px; border-right: 0; border-bottom: 1px solid var(--edge); border-radius: 0; }
+    .brand { margin: 0 auto 0 3px; font-size: 14px; white-space: nowrap; }
+    .brand-mark { width: 18px; height: 18px; }
+    .nav-primary { display: flex; gap: 3px; }
+    .nav-link { padding-inline: 8px; min-height: 44px; }
+    .nav-link .nav-icon, .nav-efforts, .search kbd { display: none; }
+    .home-view { padding: 66px 18px 42px; }
+    .home-view h1 { margin-bottom: 17px; }
+    h1 { font-size: 29px; }
+    .home-feed, .search-results { margin-top: 25px; }
+    .update-row { grid-template-columns: 23px minmax(0, 1fr) auto; gap: 7px; padding-inline: 4px; }
+    .update-row .avatar { width: 23px; height: 23px; }
+    .update-row .arrow { display: none; }
+    .update-row .stamp { font-size: 12px; }
+    .effort-view { padding: 27px 18px 36px; }
+    .disclosure { min-height: 44px; }
+    .pane { inset: 0; width: 100%; padding: max(12px, env(safe-area-inset-top)) 19px max(25px, env(safe-area-inset-bottom)); border: 0; border-radius: 0; }
+    @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+      .pane { background: rgb(21 22 24 / 81%); }
+    }
+    .pane-bar { flex-direction: row-reverse; gap: 15px; }
+    .close-icon { display: none; }
+    .close-button { min-height: 44px; padding: 0 5px; }
+    .back-label { display: inline-flex; align-items: center; gap: 7px; }
+    .back-label::before { content: ""; width: 7px; height: 7px; border: solid currentColor; border-width: 0 0 1px 1px; transform: rotate(45deg); }
+  }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    body::before { display: none; }
+    .shell, main { background: #1e1f20; }
+    .rail { background: var(--rail); }
+    .search { background: var(--detail); }
+    .search, .pane { border-color: var(--control); }
+    @media (max-width: 949px) {
+      .pane { background: var(--detail); }
+    }
+    .rail, .search, .pane { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pane { transform: none; opacity: 0; transition: opacity 125ms var(--ease-drawer), visibility 0s linear 125ms; }
+    body[data-task-open] .pane { transform: none; opacity: 1; }
+  }
+</style>
+</head>
+<body>
+  <div id="shell" class="shell">
+    <nav class="rail" aria-label="Workspace">
+      <a class="brand" href="#home"><span class="brand-mark" aria-hidden="true"></span>Working State</a>
+      <div class="nav-primary">
+        <a class="nav-link" href="#home"><span class="nav-icon home" aria-hidden="true"></span>Home</a>
+        <a class="nav-link" href="#standalone"><span class="nav-icon list" aria-hidden="true"></span>Standalone</a>
+      </div>
+      <div class="nav-efforts">
+        <p class="nav-label">Efforts</p>
+        <div id="effort-links"></div>
+      </div>
+    </nav>
+    <main id="workspace"></main>
+  </div>
+  <aside class="pane" id="task-pane" aria-labelledby="task-title" inert></aside>
+  <script>
+    const efforts = [
+      { id: 'dns', title: 'DNS migration', description: 'Move authoritative DNS to Cloudflare and verify resolution before cutover.' },
+      { id: 'backup', title: 'Backup restore test', description: 'Restore a recent backup and verify the files before closing the test.' },
+      { id: 'lab', title: 'Home lab cleanup', description: 'Document services and clear out unused jobs.' },
+    ];
+    const tasks = [
+      { id: 'inventory', effort: 'dns', title: 'Inventory DNS records', status: 'Done', description: 'Export the current zone and check that the record list is complete.' },
+      { id: 'ttl', effort: 'dns', title: 'Lower DNS record TTLs', status: 'Done', description: 'Lower TTLs before the nameserver cutover.' },
+      { id: 'staged', effort: 'dns', title: 'Verify staged DNS records', status: 'In progress', description: 'Compare staged records with the registrar export. Check mail and verification records before approving the cutover.' },
+      { id: 'switch', effort: 'dns', title: 'Switch authoritative nameservers', status: 'Todo', description: 'Switch nameservers after the staged records pass verification.' },
+      { id: 'resolve', effort: 'dns', title: 'Validate production resolution', status: 'Todo', description: 'Check production answers from more than one resolver after the switch.' },
+      { id: 'restore', effort: 'backup', title: 'Verify restored files', status: 'In progress', description: 'Check file hashes against the backup manifest and spot-check the restored directory.' },
+      { id: 'retention', effort: 'backup', title: 'Record the restore time', status: 'Todo', description: 'Add the observed restore time to the test notes.' },
+      { id: 'jobs', effort: 'lab', title: 'Review scheduled jobs', status: 'Todo', description: 'Identify obsolete jobs and record what depends on the rest.' },
+      { id: 'serial', effort: null, title: 'Record the NAS serial number', status: 'Todo', description: 'Add the serial number to the equipment inventory.' },
+      { id: 'license', effort: null, title: 'Review the expiring license', status: 'In progress', description: 'Check the renewal date and confirm whether the license is still needed.' },
+    ];
+    const updates = [
+      { id: 'staging-note', task: 'staged', author: 'Codex', time: '9:42 AM', kind: 'Work note', body: 'A and CNAME records match the export. MX and TXT still need a second pass.' },
+      { id: 'restore-log', task: 'restore', author: 'Pi', time: '9:26 AM', kind: 'Log', body: 'The restore completed. I saved the manifest and am checking file hashes.' },
+      { id: 'ttl-note', task: 'ttl', author: 'Codex', time: '9:18 AM', kind: 'Work note', body: 'Authoritative records now return a 300-second TTL. The previous TTL has elapsed.' },
+      { id: 'staging-log', task: 'staged', author: 'Pi', time: '9:10 AM', kind: 'Log', body: 'Compared staging against the registrar export. Saved the diff in the migration folder.' },
+    ];
+
+    const shell = document.getElementById('shell');
+    const workspace = document.getElementById('workspace');
+    const pane = document.getElementById('task-pane');
+    const narrow = matchMedia('(max-width: 720px)');
+    const preferences = readPreferences();
+    let route = null;
+    let opener = null;
+    let exitByPointer = false;
+
+    function readPreferences() {
+      try {
+        return JSON.parse(sessionStorage.getItem('working-state-prototype')) || { recent: {}, collapsed: {} };
+      } catch {
+        return { recent: {}, collapsed: {} };
+      }
+    }
+
+    function savePreferences() {
+      try {
+        sessionStorage.setItem('working-state-prototype', JSON.stringify(preferences));
+      } catch {
+        // The prototype can still remember preferences in the current page.
+      }
+    }
+
+    function readRoute(hash = location.hash) {
+      const [path, query] = hash.replace(/^#/, '').split('?');
+      const effort = efforts.find(item => path === 'effort/' + item.id);
+      const params = new URLSearchParams(query);
+      const task = tasks.find(item => item.id === params.get('task'));
+      const update = updates.find(item => item.id === params.get('update') && item.task === task?.id);
+      const page = effort ? path : path === 'standalone' ? path : 'home';
+      return { page, effort, task, update };
+    }
+
+    function taskLink(page, taskId, updateId) {
+      const query = new URLSearchParams({ task: taskId });
+      if (updateId) query.set('update', updateId);
+      return '#' + page + '?' + query;
+    }
+
+    function effortLink(effort) {
+      return '#effort/' + effort.id;
+    }
+
+    function getEffort(task) {
+      return efforts.find(item => item.id === task.effort);
+    }
+
+    function statusIcon(status) {
+      const kind = status === 'Done' ? 'done' : status === 'In progress' ? 'working' : '';
+      return `<span class="dot ${kind}" aria-hidden="true"></span>`;
+    }
+
+    function taskRows(items, page) {
+      return items.map(task => `
+        <li><a class="task-row" href="${taskLink(page, task.id)}" data-task="${task.id}">
+          ${statusIcon(task.status)}
+          <span class="row-title">${task.title}</span>
+          <span class="task-state">${task.status}</span>
+        </a></li>`).join('');
+    }
+
+    function updateRows(items, page, showEffort) {
+      return items.map(update => {
+        const task = tasks.find(item => item.id === update.task);
+        const context = showEffort ? ' · ' + (getEffort(task)?.title ?? 'Standalone') : '';
+        return `
+          <li><a class="update-row" href="${taskLink(page, task.id, update.id)}" data-update="${update.id}">
+            <span class="avatar" aria-hidden="true">${update.author[0]}</span>
+            <span><span class="row-title">${task.title}<span class="sr-only">${context}</span></span>
+              <span class="row-meta update-preview">${update.author} · ${update.body}</span></span>
+            <time class="stamp">${update.time}</time>
+            <span class="arrow" aria-hidden="true"></span>
+          </a></li>`;
+      }).join('');
+    }
+
+    function renderHome() {
+      workspace.innerHTML = `
+        <div class="home-view">
+          <h1 id="page-title" tabindex="-1">Find your work</h1>
+          <label class="search">
+            <span class="search-icon" aria-hidden="true"></span>
+            <span class="sr-only">Search tasks and efforts</span>
+            <input id="search" type="search" placeholder="Search tasks and efforts" autocomplete="off" aria-controls="search-results">
+            <kbd aria-hidden="true">${/^Mac/.test(navigator.platform) ? '⌘ K' : 'Ctrl K'}</kbd>
+          </label>
+          <div class="sr-only" id="search-status" role="status"></div>
+          <div class="search-results" id="search-results" hidden></div>
+          <section class="home-feed" id="home-feed" aria-labelledby="latest-title">
+            <h2 class="section-heading" id="latest-title">Latest updates</h2>
+            <ul class="flat-list">${updateRows(updates.slice(0, 3), 'home', true)}</ul>
+          </section>
+        </div>`;
+      const input = document.getElementById('search');
+      input.addEventListener('input', renderSearch);
+      input.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowDown' && event.key !== 'Enter') return;
+        const first = document.querySelector('#search-results a');
+        if (!first) return;
+        event.preventDefault();
+        if (event.key === 'ArrowDown') first.focus();
+        else first.click();
+      });
+    }
+
+    function renderSearch() {
+      const query = document.getElementById('search').value.trim().toLowerCase();
+      const results = document.getElementById('search-results');
+      document.getElementById('home-feed').hidden = Boolean(query);
+      results.hidden = !query;
+      if (!query) {
+        results.replaceChildren();
+        document.getElementById('search-status').textContent = '';
+        return;
+      }
+
+      const terms = query.split(/\s+/);
+      const matches = value => terms.every(term => value.toLowerCase().includes(term));
+      const foundEfforts = efforts.filter(effort => matches(effort.title));
+      const foundTasks = tasks.filter(task => matches(task.title + ' ' + (getEffort(task)?.title ?? 'Standalone')));
+      const count = foundEfforts.length + foundTasks.length;
+      document.getElementById('search-status').textContent = count ? count + ' results' : 'No results';
+      if (!count) {
+        results.innerHTML = '<p class="empty">No matching tasks or efforts.</p>';
+        return;
+      }
+      const effortResults = foundEfforts.map(effort => `<li><a class="result-row" href="${effortLink(effort)}">
+          <span class="nav-icon effort" aria-hidden="true"></span><span class="row-title">${effort.title}</span>
+          <span class="arrow" aria-hidden="true"></span></a></li>`).join('');
+      const taskResults = foundTasks.map(task => `<li><a class="result-row" href="${taskLink('home', task.id)}" data-task="${task.id}">
+          ${statusIcon(task.status)}<span><span class="row-title">${task.title}</span>
+          <span class="row-meta">${getEffort(task)?.title ?? 'Standalone'}</span></span>
+          <span class="arrow" aria-hidden="true"></span></a></li>`).join('');
+      results.innerHTML = [
+        ['Efforts', effortResults],
+        ['Tasks', taskResults],
+      ].filter(([, items]) => items).map(([title, items]) =>
+        `<section><h2>${title}</h2><ul class="flat-list">${items}</ul></section>`
+      ).join('');
+      markSelection();
+    }
+
+    function renderEffort(effort, page) {
+      const items = tasks.filter(task => task.effort === effort.id);
+      const itemUpdates = updates.filter(update => items.some(task => task.id === update.task)).slice(0, 2);
+      const done = items.filter(task => task.status === 'Done').length;
+      workspace.innerHTML = `
+        <div class="effort-view">
+          <header class="effort-heading">
+            <h1 id="page-title" tabindex="-1">${effort.title}</h1>
+            <p>${effort.description}</p>
+            <div class="progress"><span class="progress-track" aria-hidden="true"><span style="width:${items.length ? done / items.length * 100 : 0}%"></span></span>
+              ${done} of ${items.length} complete</div>
+          </header>
+          <details id="effort-updates" ${itemUpdates.length && !preferences.collapsed[effort.id] ? 'open' : ''}>
+            <summary class="disclosure"><span class="chevron" aria-hidden="true"></span>Latest updates</summary>
+            ${itemUpdates.length ? `<ul class="flat-list">${updateRows(itemUpdates, page, false)}</ul>` : '<p class="empty">No recent updates for this effort.</p>'}
+          </details>
+          <section class="task-section" aria-labelledby="task-list-title">
+            <h2 class="section-heading" id="task-list-title">Tasks</h2>
+            <ul class="flat-list task-list">${taskRows(items, page)}</ul>
+          </section>
+          <details class="recent">
+            <summary class="disclosure"><span class="chevron" aria-hidden="true"></span>Recent tasks
+              <span class="last-task" id="last-task"></span></summary>
+            <div id="recent-tasks"></div>
+          </details>
+        </div>`;
+      const disclosure = document.getElementById('effort-updates');
+      disclosure.addEventListener('toggle', () => {
+        preferences.collapsed[effort.id] = !disclosure.open;
+        savePreferences();
+      });
+      refreshRecents(effort, page);
+    }
+
+    function refreshRecents(effort, page) {
+      const summary = document.getElementById('last-task');
+      if (!summary) return;
+      const recent = (preferences.recent[effort.id] ?? []).map(id => tasks.find(task => task.id === id)).filter(Boolean);
+      summary.textContent = recent[0]?.title ?? '';
+      document.getElementById('recent-tasks').innerHTML = recent.length
+        ? `<ul class="flat-list">${taskRows(recent, page)}</ul>`
+        : '<p class="empty">Tasks you open here will appear here.</p>';
+    }
+
+    function renderStandalone() {
+      workspace.innerHTML = `
+        <div class="effort-view">
+          <header class="effort-heading"><h1 id="page-title" tabindex="-1">Standalone tasks</h1></header>
+          <ul class="flat-list task-list">${taskRows(tasks.filter(task => !task.effort), 'standalone')}</ul>
+        </div>`;
+    }
+
+    function renderPane(task, selectedUpdate) {
+      const effort = getEffort(task);
+      const activity = updates.filter(update => update.task === task.id);
+      const notes = activity.map(update => `
+        <li class="note" id="note-${update.id}" ${update === selectedUpdate ? 'data-target' : ''}>
+          <span class="avatar" aria-hidden="true">${update.author[0]}</span>
+          <div><div class="note-meta"><strong>${update.author}</strong>
+            <span class="row-meta">${update.kind}</span><time class="stamp">${update.time}</time></div>
+            <p>${update.body}</p>
+          </div>
+        </li>`).join('');
+      pane.innerHTML = `
+        <header class="pane-bar">
+          <span class="pane-context"><a href="${effort ? effortLink(effort) : '#standalone'}">${effort?.title ?? 'Standalone tasks'}</a></span>
+          <button type="button" class="close-button" aria-label="Close task">
+            <span class="close-icon" aria-hidden="true"></span><span class="back-label" aria-hidden="true">Back</span>
+          </button>
+        </header>
+        <h1 class="task-title" id="task-title" tabindex="-1">${task.title}</h1>
+        <span class="status">${statusIcon(task.status)}${task.status}</span>
+        <p class="pane-description">${task.description}</p>
+        <section class="activity" aria-labelledby="activity-title">
+          <h2 id="activity-title">Activity</h2>
+          ${notes ? `<ul class="flat-list">${notes}</ul>` : '<p class="empty">No work notes or logs yet.</p>'}
+        </section>`;
+      pane.scrollTop = 0;
+    }
+
+    function markSelection() {
+      for (const link of workspace.querySelectorAll('a[data-task], a[data-update]')) {
+        const current = link.dataset.task
+          ? link.dataset.task === route.task?.id
+          : link.dataset.update === route.update?.id;
+        if (current) link.setAttribute('aria-current', 'true');
+        else link.removeAttribute('aria-current');
+      }
+    }
+
+    function syncMobilePane() {
+      const modal = Boolean(narrow.matches && route.task);
+      pane.inert = !route.task;
+      shell.inert = modal;
+      if (modal) {
+        pane.setAttribute('role', 'dialog');
+        pane.setAttribute('aria-modal', 'true');
+      } else {
+        pane.removeAttribute('role');
+        pane.removeAttribute('aria-modal');
+      }
+    }
+
+    function renderRoute(next, { pointer = false, focus = true } = {}) {
+      const prior = route;
+      route = next;
+      const pageChanged = prior?.page !== route.page;
+      const opening = route.task && (route.task !== prior?.task || route.update !== prior?.update);
+      if (pageChanged) {
+        if (route.effort) renderEffort(route.effort, route.page);
+        else if (route.page === 'standalone') renderStandalone();
+        else renderHome();
+        for (const link of document.querySelectorAll('.nav-link')) {
+          if (link.getAttribute('href') === '#' + route.page) link.setAttribute('aria-current', 'page');
+          else link.removeAttribute('aria-current');
+        }
+        window.scrollTo(0, 0);
+      }
+      if (opening) {
+        const parent = getEffort(route.task);
+        if (parent) {
+          const seen = preferences.recent[parent.id] ?? [];
+          preferences.recent[parent.id] = [route.task.id, ...seen.filter(id => id !== route.task.id)].slice(0, 3);
+          savePreferences();
+          if (parent === route.effort) refreshRecents(parent, route.page);
+        }
+        renderPane(route.task, route.update);
+      }
+      document.body.toggleAttribute('data-instant', !pointer);
+      document.body.toggleAttribute('data-task-open', Boolean(route.task));
+      syncMobilePane();
+      markSelection();
+      if (!focus) return;
+      if (opening) document.getElementById('task-title').focus({ preventScroll: true });
+      else if (prior?.task && !route.task && !pageChanged && opener?.isConnected) opener.focus({ preventScroll: true });
+      else if (pageChanged || prior?.task && !route.task) document.getElementById('page-title').focus({ preventScroll: true });
+    }
+
+    function navigate(hash, pointer = false, forceReplace = false) {
+      const next = readRoute(hash);
+      if (hash === location.hash) {
+        if (next.task) document.getElementById('task-title').focus({ preventScroll: true });
+        return;
+      }
+      const opensDetail = next.page === route.page && Boolean(next.task);
+      const replace = forceReplace || (next.page === route.page && Boolean(route.task));
+      const detailEntry = opensDetail && (!replace || history.state?.detailEntry);
+      history[replace ? 'replaceState' : 'pushState']({ detailEntry }, '', hash);
+      renderRoute(next, { pointer });
+    }
+
+    function closeTask(pointer) {
+      if (history.state?.detailEntry) {
+        exitByPointer = pointer;
+        history.back();
+      } else {
+        navigate('#' + route.page, pointer, true);
+      }
+    }
+
+    document.getElementById('effort-links').innerHTML = efforts.map(effort => `
+      <a class="nav-link" href="${effortLink(effort)}"><span class="nav-icon effort" aria-hidden="true"></span>${effort.title}</a>`).join('');
+    document.addEventListener('click', event => {
+      const close = event.target.closest('.close-button');
+      if (close) {
+        closeTask(event.detail > 0);
+        return;
+      }
+      const link = event.target.closest('a[href^="#"]');
+      if (!link || event.defaultPrevented || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const hash = link.getAttribute('href');
+      event.preventDefault();
+      if (!route.task) opener = link;
+      if (route.task && hash === '#' + route.page) closeTask(event.detail > 0);
+      else navigate(hash, event.detail > 0);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && route.task) {
+        event.preventDefault();
+        closeTask(false);
+      }
+      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        navigate('#home');
+        document.getElementById('search').focus();
+      }
+      if (event.key === 'Tab' && narrow.matches && route.task) {
+        const controls = [...pane.querySelectorAll('a[href], button')];
+        if (event.shiftKey && document.activeElement === controls[0]) {
+          event.preventDefault();
+          controls.at(-1).focus();
+        } else if (!event.shiftKey && (document.activeElement === controls.at(-1) || document.activeElement.id === 'task-title')) {
+          event.preventDefault();
+          controls[0].focus();
+        }
+      }
+    });
+    window.addEventListener('popstate', () => {
+      renderRoute(readRoute(), { pointer: exitByPointer });
+      exitByPointer = false;
+    });
+    narrow.addEventListener('change', syncMobilePane);
+    renderRoute(readRoute(), { focus: false });
+  </script>
+</body>
+</html>

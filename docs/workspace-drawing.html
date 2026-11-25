@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Workspace Dimensional Drawing</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #eeeeee;
+      --sheet: #ffffff;
+      --ink: #111111;
+      --muted: #515151;
+      --guide: #777777;
+      --well: #f6f6f6;
+      --control: #ededed;
+      --active: #e4e4e4;
+      --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font-family: var(--font); }
+    main { max-width: 1780px; margin-inline: auto; padding: 24px max(16px, env(safe-area-inset-right)) 28px max(16px, env(safe-area-inset-left)); }
+    .title-block {
+      display: grid; grid-template-columns: 2.2fr repeat(3, 1fr);
+      border: 1.2px solid var(--ink); border-radius: 16px; overflow: hidden;
+      background: var(--sheet); margin-bottom: 16px;
+    }
+    .cell { min-width: 0; padding: 9px 14px; border-right: .8px solid var(--ink); border-bottom: .8px solid var(--ink); }
+    .cell:nth-child(4), .cell:nth-child(7) { border-right: 0; }
+    .identity { grid-row: span 2; display: flex; flex-direction: column; justify-content: center; }
+    h1 { margin: 5px 0 7px; font-size: clamp(24px, 2.7vw, 43px); font-weight: 400; line-height: 1; letter-spacing: .085em; text-transform: uppercase; }
+    .label, .scope, .value, footer { letter-spacing: .075em; text-transform: uppercase; }
+    .label { color: var(--muted); font-size: 9.5px; }
+    .scope { color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+    .value { margin-top: 3px; font-size: 12px; }
+    .general { grid-column: 1 / -1; border-bottom: .8px solid var(--ink); padding: 8px 14px 10px; }
+    .general h2 { margin: 0 0 4px; font-size: 10px; font-weight: 650; letter-spacing: .09em; text-transform: uppercase; }
+    .general ol { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 28px; margin: 0; padding-left: 15px; font-size: 11px; line-height: 1.5; }
+    .variables { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(7, 1fr); }
+    .variables > div { padding: 8px 14px; border-right: .8px solid var(--ink); }
+    .variables > div:last-child { border-right: 0; }
+    .variable-value { margin-top: 4px; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .sheet { background: var(--sheet); border-radius: 16px; overflow-x: auto; }
+    .sheet:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+    svg { display: block; width: 100%; min-width: 1100px; height: auto; }
+    footer { display: flex; justify-content: space-between; gap: 12px; padding: 9px 4px 0; color: var(--muted); font-size: 10px; }
+    @media (max-width: 720px) {
+      .title-block { grid-template-columns: 1fr 1fr; }
+      .identity { grid-column: 1 / -1; grid-row: auto; }
+      .cell:nth-child(n) { border-right: .8px solid var(--ink); }
+      .identity:nth-child(n), .cell:nth-child(odd) { border-right: 0; }
+      .general ol { grid-template-columns: 1fr; }
+      .variables { grid-template-columns: repeat(2, 1fr); }
+      .variables > div { border-bottom: .8px solid var(--ink); }
+      .variables > div:nth-child(even) { border-right: 0; }
+      .variables > div:last-child { grid-column: 1 / -1; border-bottom: 0; }
+    }
+    .border, .thin, .dimension, .extension, .guide, .lead, .hatch { fill: none; }
+    .border { stroke: var(--ink); stroke-width: 1.2; }
+    .obj, .well, .hug, .active, .thin, .lead, .hatch { stroke: var(--ink); stroke-linejoin: round; }
+    .obj { fill: var(--sheet); stroke-width: 1.6; }
+    .well { fill: var(--well); stroke-width: .85; }
+    .hug { fill: var(--control); stroke-width: .85; }
+    .active { fill: var(--active); stroke-width: 1.1; }
+    .thin, .hatch { stroke-width: .8; }
+    .lead, .dimension { stroke: var(--ink); stroke-width: .7; }
+    .extension { stroke: var(--ink); stroke-width: .55; }
+    .hatch { fill: url(#hatch); }
+    .slot, .guide, .reference { fill: none; stroke: var(--guide); stroke-width: .8; }
+    .slot { stroke-dasharray: 4 3; }
+    .guide { stroke-dasharray: 14 3 2 3; }
+    .reference { stroke-dasharray: 4 3; }
+    .arrow, .dot { fill: var(--ink); }
+    .figure, .sub, .slot-label, .note-heading, .table-heading { text-transform: uppercase; }
+    .figure { font: 400 15px var(--font); letter-spacing: .115em; }
+    .sub, .slot-label { fill: var(--muted); letter-spacing: .065em; }
+    .sub { font: 400 10px var(--font); }
+    .slot-label { font: 400 9px var(--font); }
+    .dim-label { font: 400 11px var(--font); paint-order: stroke; stroke: var(--sheet); stroke-width: 4px; stroke-linejoin: round; }
+    .note-heading { font: 650 12px var(--font); letter-spacing: .08em; }
+    .note, .table-cell { font: 400 11.5px var(--font); }
+    .note { fill: var(--muted); }
+    .note-number { font: 400 9.5px var(--font); }
+    .table-heading { font: 650 10px var(--font); letter-spacing: .055em; }
+    .note-number, .note-heading, .figure, .dim-label, .table-cell, .table-heading { fill: var(--ink); }
+  </style>
+</head>
+<body>
+<main>
+  <header class="title-block">
+    <div class="cell identity">
+      <div class="label">UI layout dimensional drawing</div>
+      <h1>Task Workspace</h1>
+      <div class="scope">Wide and narrow plans for browsing work and handing off tasks</div>
+    </div>
+    <div class="cell"><div class="label">Dwg no.</div><div class="value">UI-WSP-001</div></div>
+    <div class="cell"><div class="label">Rev</div><div class="value">A · Concept</div></div>
+    <div class="cell"><div class="label">Sheets</div><div class="value">1 of 1</div></div>
+    <div class="cell"><div class="label">Units</div><div class="value">CSS px at 1×</div></div>
+    <div class="cell"><div class="label">Scale</div><div class="value">Schematic</div></div>
+    <div class="cell"><div class="label">Source</div><div class="value"><a href="v1-design.md" style="color: inherit">V1 design brief</a></div></div>
+    <section class="general" aria-labelledby="general-notes">
+      <h2 id="general-notes">Notes unless otherwise specified</h2>
+      <ol>
+        <li>Do not measure from the drawing. Use the variable tables.</li>
+        <li>HUG fits content, FLEX takes the remaining space, and FILL spans the parent.</li>
+        <li>Slots describe the layout. Grayscale distinguishes layers and states.</li>
+        <li>[TBD] marks dimensions to establish in a responsive prototype.</li>
+      </ol>
+    </section>
+    <div class="variables" aria-label="Key variables">
+      <div><div class="label">BP · Layout breakpoint</div><div class="variable-value">[TBD]</div></div>
+      <div><div class="label">W1 · Navigation</div><div class="variable-value">[TBD]</div></div>
+      <div><div class="label">W2 · List</div><div class="variable-value">W0 − W1 − W3</div></div>
+      <div><div class="label">W3 · Task detail</div><div class="variable-value">[TBD]</div></div>
+      <div><div class="label">H2 · Task row min</div><div class="variable-value">max(T1, H3 + 2·S2)</div></div>
+      <div><div class="label">V1 · Narrow inset</div><div class="variable-value">[TBD]</div></div>
+      <div><div class="label">T1 · Touch target min</div><div class="variable-value">[TBD]</div></div>
+    </div>
+  </header>
+  <div class="sheet" tabindex="0" role="region" aria-label="Scrollable drawing sheet">
+    <svg id="sheet" viewBox="0 0 1700 1060" role="img" aria-labelledby="sheet-title sheet-description">
+      <title id="sheet-title">Task workspace architecture</title>
+      <desc id="sheet-description">The wide plan has navigation, a task list, and task detail beside it. The narrow plan shows browsing and task detail as separate full-width views. Enlarged details show a task row and an activity entry. Tables identify dimensions for a future prototype.</desc>
+    </svg>
+  </div>
+  <footer><span>2026-11-24 &nbsp;|&nbsp; UI layout reference</span><span>Workspace architecture &nbsp;|&nbsp; 1</span></footer>
+</main>
+<script>
+  (() => {
+    const svg = document.getElementById('sheet');
+    const ns = 'http://www.w3.org/2000/svg';
+    const arrow = 'url(#arrow)';
+
+    // Drawing primitives adapted from the dimensional drawing examples.
+    function draw(tag, attributes, parent = svg) {
+      const element = document.createElementNS(ns, tag);
+      for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+      parent.append(element);
+      return element;
+    }
+    function text(x, y, value, className, anchor = 'start') {
+      const element = draw('text', { x, y, class: className, 'text-anchor': anchor });
+      element.textContent = value;
+      return element;
+    }
+    function rect(x, y, width, height, className, rx = 0) {
+      return draw('rect', { x, y, width, height, rx, class: className });
+    }
+    function line(x1, y1, x2, y2, className, markers = {}) {
+      return draw('line', { x1, y1, x2, y2, class: className, ...markers });
+    }
+    function slot(x, y, width, height, label, className = 'slot', align = 'start') {
+      rect(x, y, width, height, className, 2);
+      if (label) text(align === 'middle' ? x + width / 2 : x + 8, y + height / 2 + 3.1, label, 'slot-label', align);
+    }
+    function dimensionLine(x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.hypot(dx, dy);
+      if (length >= 28) {
+        line(x1, y1, x2, y2, 'dimension', { 'marker-start': arrow, 'marker-end': arrow });
+      } else {
+        const ex = 11 * dx / length;
+        const ey = 11 * dy / length;
+        line(x1, y1, x2, y2, 'dimension');
+        line(x1 - ex, y1 - ey, x1, y1, 'dimension', { 'marker-end': arrow });
+        line(x2 + ex, y2 + ey, x2, y2, 'dimension', { 'marker-end': arrow });
+      }
+    }
+    function dimH(x1, x2, y, edge, label, offset = -5) {
+      const direction = Math.sign(y - edge);
+      for (const x of [x1, x2]) line(x, edge + 3 * direction, x, y + 5 * direction, 'extension');
+      dimensionLine(x1, y, x2, y);
+      text((x1 + x2) / 2, y + offset, label, 'dim-label', 'middle');
+    }
+    function dimV(y1, y2, x, edge, label, side = 'left') {
+      const direction = Math.sign(x - edge);
+      const labelX = side === 'left' ? x - 6 : x + 6;
+      for (const y of [y1, y2]) line(edge + 3 * direction, y, x + 5 * direction, y, 'extension');
+      dimensionLine(x, y1, x, y2);
+      text(labelX, (y1 + y2) / 2 + 4, label, 'dim-label', side === 'left' ? 'end' : 'start');
+    }
+    function badge(x, y, label) {
+      rect(x, y, 15, 15, 'obj', 1);
+      text(x + 7.5, y + 11, label, 'note-number', 'middle');
+    }
+    function columnLabels(x, y, title, subtitle) {
+      text(x, y, title, 'figure');
+      if (subtitle) text(x, y + 16, subtitle, 'sub');
+    }
+    function status(x, y, state, size = 6) {
+      draw('circle', { cx: x, cy: y, r: size, class: 'thin' });
+      if (state === 'progress') {
+        draw('path', {
+          d: `M ${x} ${y - size} a ${size} ${size} 0 0 1 0 ${2 * size} Z`,
+          class: 'dot'
+        });
+      }
+      if (state === 'done') {
+        draw('path', {
+          d: `M ${x - size * .5} ${y} l ${size * .35} ${size * .35} ${size * .65} ${-size * .75}`,
+          class: 'thin'
+        });
+      }
+    }
+    function reference(x, y, radius, endX, endY, label) {
+      draw('circle', { cx: x, cy: y, r: radius, class: 'reference' });
+      const angle = Math.atan2(endY - y, endX - x);
+      line(x + radius * Math.cos(angle), y + radius * Math.sin(angle), endX, endY, 'lead');
+      text(endX + 5, endY + 3, label, 'sub');
+    }
+    function table(x, y, title, rows) {
+      const widths = [48, 127, 160];
+      const rowHeight = 22;
+      columnLabels(x, y, title, '');
+      const entries = [['Code', 'Variable', 'Value'], ...rows];
+      entries.forEach((row, index) => {
+        let left = x;
+        const top = y + 12 + index * rowHeight;
+        row.forEach((value, column) => {
+          rect(left, top, widths[column], rowHeight, index === 0 ? 'well' : 'thin');
+          text(left + 8, top + 15, value, index === 0 ? 'table-heading' : 'table-cell');
+          left += widths[column];
+        });
+      });
+    }
+
+    const defs = draw('defs', {});
+    const marker = draw('marker', {
+      id: 'arrow', viewBox: '0 0 10 10', refX: 10, refY: 5, markerWidth: 7,
+      markerHeight: 7, orient: 'auto-start-reverse', markerUnits: 'userSpaceOnUse'
+    }, defs);
+    draw('path', { d: 'M0 1.7 L10 5 L0 8.3 Z', class: 'arrow' }, marker);
+    const pattern = draw('pattern', {
+      id: 'hatch', width: 5, height: 5, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)'
+    }, defs);
+    draw('line', { x1: 0, y1: 0, x2: 0, y2: 5, class: 'extension' }, pattern);
+    rect(20, 20, 1660, 1020, 'border', 16);
+    line(1269, 43, 1269, 1016, 'thin');
+    line(49, 612, 1242, 612, 'thin');
+
+    // Notes and navigation relationships.
+    columnLabels(55, 60, 'Layout notes', 'Wide and narrow view relationships');
+    const notes = [
+      ['Standalone tasks', 'Give one-off tasks a top-level view.', 'Use the same detail view for all tasks.'],
+      ['Effort context', 'Keep progress and effort controls', 'above the task list.'],
+      ['Task detail', 'Keep the description and work history', 'together when a task opens.'],
+      ['Phone navigation', 'Open the task as a full-width view.', 'Back returns to the originating list.']
+    ];
+    notes.forEach(([heading, ...body], index) => {
+      const y = 112 + index * 72;
+      badge(55, y - 11, index + 1);
+      text(79, y, heading, 'note-heading');
+      body.forEach((copy, row) => text(79, y + 18 + row * 15, copy, 'note'));
+    });
+
+    columnLabels(55, 426, 'Selection paths', 'Both lists use the same task detail');
+    slot(55, 454, 111, 24, 'Standalone list', 'slot', 'middle');
+    slot(179, 454, 108, 24, 'Effort task list', 'slot', 'middle');
+    line(110, 478, 110, 492, 'lead');
+    line(233, 478, 233, 492, 'lead');
+    line(110, 492, 233, 492, 'lead');
+    line(171, 492, 171, 511, 'lead', { 'marker-end': arrow });
+    slot(108, 511, 126, 25, 'Task detail', 'well', 'middle');
+
+    // Wide plan. Coordinates are drawing geometry only.
+    columnLabels(347, 60, 'Wide plan', 'Navigation, task list and selected task');
+    dimH(347, 1231, 99, 130, 'W0');
+    rect(347, 130, 884, 422, 'obj', 5);
+    rect(348, 131, 882, 43, 'well');
+    dimV(130, 175, 324, 347, 'H1');
+    slot(360, 141, 127, 22, 'Workspace slot');
+    slot(514, 141, 127, 22, 'Create action · hug', 'hug');
+    slot(1150, 141, 66, 22, 'Account', 'hug', 'middle');
+    rect(348, 175, 153, 376, 'well');
+    line(501, 175, 501, 552, 'thin');
+    line(914, 175, 914, 552, 'thin');
+    slot(360, 191, 129, 24, 'Standalone view');
+    badge(475, 184, 1);
+    slot(360, 225, 129, 24, 'Effort index');
+    slot(370, 255, 119, 25, 'Effort slot · flex', 'active');
+    slot(370, 287, 119, 22, 'Effort slot · flex');
+    slot(370, 316, 119, 22, 'Effort slot · flex');
+    slot(360, 513, 129, 22, 'Archive filter', 'hug');
+
+    slot(520, 194, 249, 32, 'Effort title slot · flex');
+    badge(765, 187, 2);
+    slot(796, 194, 99, 32, 'Effort controls', 'hug', 'middle');
+    slot(520, 235, 375, 42, 'Effort description slot · fill');
+    slot(520, 287, 123, 23, 'Progress slot · hug', 'hug');
+    slot(796, 287, 99, 23, 'New task action', 'hug', 'middle');
+    line(520, 322, 895, 322, 'thin');
+    function wideRow(y, state, selected = false) {
+      rect(520, y, 375, 37, selected ? 'active' : 'well', 2);
+      status(538, y + 18.5, state);
+      slot(552, y + 8, 263, 21, 'Task title slot · flex');
+      slot(825, y + 8, 61, 21, 'Trail', 'hug', 'middle');
+    }
+    wideRow(334, 'done');
+    wideRow(378, 'progress', true);
+    wideRow(436, 'todo');
+    wideRow(480, 'todo');
+    reference(538, 396.5, 12, 565, 425, 'Detail A');
+
+    slot(932, 194, 216, 32, 'Task title slot · flex');
+    slot(1157, 194, 56, 32, 'Close', 'hug', 'middle');
+    badge(929, 187, 3);
+    slot(932, 235, 92, 23, 'Status', 'hug');
+    slot(1033, 235, 180, 23, 'Effort link slot');
+    slot(932, 268, 281, 55, 'Description slot · fill');
+    line(932, 334, 1213, 334, 'thin');
+    slot(932, 345, 281, 22, 'Activity heading slot');
+    slot(932, 376, 281, 51, 'Activity entry slot · fill', 'well');
+    reference(1196, 401, 11, 1157, 437, 'Detail B');
+    slot(932, 448, 281, 35, 'Activity entry slot · fill', 'well');
+    slot(932, 494, 281, 39, 'Activity composer slot · fill');
+    dimH(347, 501, 576, 552, 'W1', 14);
+    dimH(501, 914, 576, 552, 'W2 · FLEX', 14);
+    dimH(914, 1231, 576, 552, 'W3', 14);
+
+    // Enlarged task and activity anatomy.
+    columnLabels(55, 644, 'Detail A · Task row', 'Status, title and trailing action');
+    rect(105, 691, 463, 82, 'obj', 3);
+    draw('circle', { cx: 139, cy: 732, r: 21, class: 'reference' });
+    status(139, 732, 'progress', 9);
+    slot(172, 704, 302, 29, 'Title slot · flex · wraps');
+    slot(172, 740, 302, 20, 'Meta slot · flex');
+    slot(486, 717, 69, 30, 'Trail · hug', 'hug', 'middle');
+    dimV(691, 773, 83, 105, 'H2');
+    dimV(704, 760, 589, 568, 'H3', 'right');
+    dimH(105, 118, 791, 773, 'S1', 15);
+    dimH(118, 160, 791, 753, 'T1');
+    dimH(474, 486, 791, 760, 'S3', 15);
+    text(172, 805, 'Dashed ring shows the touch target.', 'note');
+
+    columnLabels(55, 853, 'Detail B · Activity entry', 'Author and time travel with each note or log');
+    rect(105, 887, 463, 101, 'obj', 3);
+    rect(118, 903, 24, 24, 'thin', 2);
+    line(118, 903, 142, 927, 'thin');
+    line(142, 903, 118, 927, 'thin');
+    slot(154, 903, 228, 24, 'Author slot · flex');
+    slot(389, 903, 78, 24, 'Type · hug', 'hug', 'middle');
+    slot(474, 903, 81, 24, 'Time · hug', 'hug', 'middle');
+    slot(154, 936, 401, 36, 'Body slot · fill · wraps');
+    dimV(887, 903, 589, 568, 'S2', 'right');
+    dimV(972, 988, 589, 568, 'S2', 'right');
+
+    // Narrow plans share a vertical safe area and horizontal content inset.
+    columnLabels(657, 644, 'Narrow plan', 'List and task use the full viewport in turn');
+    function narrowFrame(x) {
+      rect(x, 694, 214, 302, 'obj', 8);
+      rect(x + 2, 697, 210, 12, 'hatch', 3);
+      rect(x + 2, 981, 210, 12, 'hatch', 3);
+      line(x + 12, 711, x + 12, 979, 'guide');
+      line(x + 202, 711, x + 202, 979, 'guide');
+      dimH(x, x + 214, 677, 694, 'W4');
+    }
+    const browse = 679;
+    const task = 975;
+    narrowFrame(browse);
+    narrowFrame(task);
+    slot(browse + 12, 716, 119, 25, 'View title slot');
+    slot(browse + 139, 716, 63, 25, 'Create', 'hug', 'middle');
+    slot(browse + 12, 750, 96, 23, 'Standalone view', 'active', 'middle');
+    slot(browse + 112, 750, 90, 23, 'Effort view', 'hug', 'middle');
+    for (const [index, state] of ['progress', 'todo', 'done', 'todo'].entries()) {
+      const y = 789 + index * 43;
+      rect(browse + 12, y, 190, 35, index === 0 ? 'active' : 'well', 2);
+      status(browse + 26, y + 17.5, state, 5);
+      slot(browse + 37, y + 8, 150, 19, 'Task title slot');
+    }
+    dimH(browse, browse + 12, 1005, 977, 'V1', 12);
+    text(browse + 107, 1025, 'Browse · standalone selected', 'sub', 'middle');
+
+    slot(task + 12, 716, 62, 25, 'Back', 'hug', 'middle');
+    slot(task + 82, 716, 120, 25, 'Task actions', 'hug', 'middle');
+    badge(task + 3, 713, 4);
+    slot(task + 12, 750, 190, 26, 'Task title slot · fill');
+    slot(task + 12, 785, 67, 21, 'Status', 'hug', 'middle');
+    slot(task + 85, 785, 117, 21, 'Effort link slot');
+    slot(task + 12, 814, 190, 36, 'Description slot');
+    line(task + 12, 857, task + 202, 857, 'thin');
+    slot(task + 12, 864, 190, 19, 'Activity heading slot');
+    slot(task + 12, 889, 190, 41, 'Activity entry slot', 'well');
+    slot(task + 12, 937, 190, 36, 'Activity composer slot');
+    dimV(709, 747, 1211, task + 214, 'H4', 'right');
+    dimV(697, 709, 1233, task + 214, 'V2', 'right');
+    dimV(981, 993, 1233, task + 214, 'V3', 'right');
+    line(browse + 221, 806, task - 9, 806, 'lead', { 'marker-end': arrow });
+    text((browse + 214 + task) / 2, 795, 'Open task', 'sub', 'middle');
+    text(task + 107, 1025, 'Task detail', 'sub', 'middle');
+
+    const sections = [
+      [60, 'Widths and breakpoint', [
+        ['BP', 'wide breakpoint', '[TBD]'],
+        ['W0', 'wide viewport', '[TBD]'],
+        ['W1', 'navigation rail', '[TBD]'],
+        ['W2', 'task list column', 'W0 − W1 − W3 = [TBD]'],
+        ['W3', 'task detail column', '[TBD]'],
+        ['W4', 'narrow viewport', '[TBD]']
+      ]],
+      [255, 'Heights and touch', [
+        ['H1', 'wide toolbar height', '[TBD]'],
+        ['H2', 'task row min height', 'max(T1, H3 + 2·S2) = [TBD]'],
+        ['H3', 'row content min', '[TBD]'],
+        ['H4', 'narrow toolbar height', '[TBD]'],
+        ['T1', 'touch target min', '[TBD]']
+      ]],
+      [428, 'Insets and safe areas', [
+        ['S1', 'row horizontal inset', '[TBD]'],
+        ['S2', 'row / entry inset', '[TBD]'],
+        ['S3', 'content-to-action gap', '[TBD]'],
+        ['V1', 'narrow content inset', '[TBD]'],
+        ['V2', 'top safe area', '[TBD]'],
+        ['V3', 'bottom safe area', '[TBD]']
+      ]]
+    ];
+    sections.forEach(([y, title, rows]) => table(1298, y, title, rows));
+
+    columnLabels(1298, 629, 'Line conventions', 'Grayscale is for this drawing');
+    [
+      ['obj', 'Surface boundary'],
+      ['slot', 'Content slot'],
+      ['active', 'Selected surface'],
+      ['hug', 'Control surface'],
+      ['guide', 'Alignment guide'],
+      ['hatch', 'Safe area']
+    ].forEach(([className, label], index) => {
+      const y = 662 + index * 25;
+      if (className === 'guide') line(1298, y + 6, 1342, y + 6, 'guide');
+      else rect(1298, y, 44, 12, className, 1);
+      text(1354, y + 10, label, 'table-cell');
+    });
+
+    columnLabels(1298, 841, 'Status marks', 'Alternate symbols in the same slot');
+    [['todo', 'Todo'], ['progress', 'In progress'], ['done', 'Done']].forEach(([state, label], index) => {
+      const y = 882 + 30 * index;
+      status(1308, y, state, 7);
+      text(1326, y + 4, label, 'table-cell');
+    });
+  })();
+</script>
+</body>
+</html>
