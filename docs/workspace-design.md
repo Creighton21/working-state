@@ -2,7 +2,7 @@
 
 Working State opens on a quiet workspace for finding a task or catching up on recent work. Home gives search and updates the focus. An effort gives most of the workspace to its task list, with task details available alongside it on desktop.
 
-[Interactive prototype](workspace-prototype.html) · [PNG preview](workspace-prototype.png) · [Animated handoff demo](workspace-handoff/index.html)
+[Interactive prototype](workspace-prototype.html) · [PNG preview](workspace-prototype.png) · [Animated handoff demo](workspace-handoff/index.html) · [Handoff video](workspace-handoff/workspace-handoff.mp4)
 
 ## Home
 
