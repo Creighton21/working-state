@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^startup$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GIT_TERMINAL_PROMPT=0 git pull --ff-only --no-rebase --no-autostash >/dev/null",
+            "timeout": 30,
+            "statusMessage": "Pulling latest Git changes"
+          }
+        ]
+      }
+    ]
+  }
+}

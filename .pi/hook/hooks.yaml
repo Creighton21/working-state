@@ -1,0 +1,8 @@
+hooks:
+  - id: git-pull-on-session-start
+    event: session.created
+    scope: main
+    actions:
+      - bash:
+          command: GIT_TERMINAL_PROMPT=0 git pull --ff-only --no-rebase --no-autostash
+          timeout: 30000
