@@ -4,13 +4,32 @@ export interface Session {
   csrfToken: string
 }
 
-export interface Task {
+export type Status = 'todo' | 'in_progress' | 'done'
+
+export interface TaskSummary {
   id: string
   title: string
-  description: string | null
-  status: 'todo' | 'in_progress' | 'done'
+  status: Status
   version: number
+  effortId: string | null
+}
+
+export interface Task extends TaskSummary {
+  description: string | null
   activity: Note[]
+}
+
+export interface EffortSummary {
+  id: string
+  title: string
+  status: Status
+  completedCount: number
+  totalCount: number
+}
+
+export interface Effort extends EffortSummary {
+  description: string | null
+  tasks: TaskSummary[]
 }
 
 interface Author {

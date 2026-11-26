@@ -2,17 +2,134 @@ openapi: 3.1.0
 info:
   title: Working State
   version: '1.0'
-  description: Standalone tasks and attributed work notes in a self-hosted workspace.
+  description: Efforts, tasks, and attributed work notes in a self-hosted workspace.
 servers:
   - url: /
 security:
   - agentBearer: []
   - ownerSession: []
 paths:
+  /api/v1/efforts:
+    get:
+      operationId: listEfforts
+      summary: List efforts and their current progress
+      responses:
+        '200':
+          description: Efforts ordered by title and ID.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EffortSummary'
+              example:
+                - id: 6e9a158a-0179-44e6-b024-32dadbae3414
+                  title: Restore verification
+                  status: in_progress
+                  completedCount: 1
+                  totalCount: 2
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createEffort
+      summary: Create an effort
+      security:
+        - agentBearer: []
+        - ownerSession: []
+          sessionCsrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEffort'
+            example:
+              title: Restore verification
+              description: Confirm that the backup retains task activity.
+      responses:
+        '201':
+          description: Effort created with status todo and zero tasks.
+          headers:
+            Location:
+              description: Path to the created effort in the API.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Effort'
+              example:
+                id: 6e9a158a-0179-44e6-b024-32dadbae3414
+                title: Restore verification
+                description: Confirm that the backup retains task activity.
+                status: todo
+                completedCount: 0
+                totalCount: 0
+                tasks: []
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/efforts/{effortId}:
+    parameters:
+      - $ref: '#/components/parameters/EffortId'
+    get:
+      operationId: getEffort
+      summary: Get an effort, its progress, and member tasks
+      responses:
+        '200':
+          description: Effort and member tasks from a consistent read. Member tasks are ordered by title and ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Effort'
+              example:
+                id: 6e9a158a-0179-44e6-b024-32dadbae3414
+                title: Restore verification
+                description: Confirm that the backup retains task activity.
+                status: done
+                completedCount: 1
+                totalCount: 1
+                tasks:
+                  - id: 88a5a758-aa65-4737-81d9-ff747f9e1765
+                    title: Review restored notes
+                    status: done
+                    version: 2
+                    effortId: 6e9a158a-0179-44e6-b024-32dadbae3414
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/EffortNotFound'
   /api/v1/tasks:
+    get:
+      operationId: listStandaloneTasks
+      summary: List tasks without an effort
+      parameters:
+        - in: query
+          name: scope
+          required: true
+          schema:
+            type: string
+            const: standalone
+      responses:
+        '200':
+          description: Standalone tasks ordered by title and ID, including tasks without activity.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskSummary'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: createTask
-      summary: Create a standalone task
+      summary: Create a standalone task or an effort member
       security:
         - agentBearer: []
         - ownerSession: []
@@ -23,9 +140,17 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateTask'
+            examples:
+              standalone:
+                value:
+                  title: Review restored notes
+              effortMember:
+                value:
+                  title: Compare database backups
+                  effortId: 6e9a158a-0179-44e6-b024-32dadbae3414
       responses:
         '201':
-          description: Standalone task created with status todo and version 1.
+          description: Task created with status todo and version 1.
           headers:
             Location:
               description: Path to the created task in the API.
@@ -42,12 +167,14 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/EffortNotFound'
   /api/v1/tasks/{taskId}:
     parameters:
       - $ref: '#/components/parameters/TaskId'
     get:
       operationId: getTask
-      summary: Get a task and its activity
+      summary: Get a task, its effort membership, and activity
       responses:
         '200':
           $ref: '#/components/responses/Task'
@@ -81,6 +208,46 @@ paths:
           $ref: '#/components/responses/TaskNotFound'
         '409':
           description: The expected version is stale. Fetch the task again before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/tasks/{taskId}/effort:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    patch:
+      operationId: assignTaskToEffort
+      summary: Assign a standalone task to an effort when its version matches
+      security:
+        - agentBearer: []
+        - ownerSession: []
+          sessionCsrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTaskToEffort'
+            example:
+              effortId: 6e9a158a-0179-44e6-b024-32dadbae3414
+              expectedVersion: 2
+      responses:
+        '200':
+          $ref: '#/components/responses/Task'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: The task or destination effort does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The version is stale or the task already belongs to an effort. Fetch the task to see its current version and membership.
           content:
             application/json:
               schema:
@@ -157,6 +324,13 @@ components:
       name: X-CSRF-TOKEN
       description: Browser session token returned by GET /api/v1/session.
   parameters:
+    EffortId:
+      in: path
+      name: effortId
+      required: true
+      schema:
+        type: string
+        format: uuid
     TaskId:
       in: path
       name: taskId
@@ -166,7 +340,7 @@ components:
         format: uuid
   responses:
     Task:
-      description: Task with its current version and activity in newest-first order.
+      description: Task with its current version, effort membership, and activity in newest-first order.
       content:
         application/json:
           schema:
@@ -195,10 +369,74 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    EffortNotFound:
+      description: No effort has this ID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
   schemas:
     Status:
       type: string
       enum: [todo, in_progress, done]
+    CreateEffort:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Required and must contain at least one non-whitespace character.
+        description:
+          type: [string, 'null']
+    EffortSummary:
+      type: object
+      required: [id, title, status, completedCount, totalCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/Status'
+          description: Empty or all-todo efforts are todo. Nonempty all-done efforts are done. Every other effort is in_progress.
+        completedCount:
+          type: integer
+          minimum: 0
+        totalCount:
+          type: integer
+          minimum: 0
+    Effort:
+      allOf:
+        - $ref: '#/components/schemas/EffortSummary'
+        - type: object
+          required: [description, tasks]
+          properties:
+            description:
+              type: [string, 'null']
+            tasks:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaskSummary'
+    TaskSummary:
+      type: object
+      required: [id, title, status, version, effortId]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/Status'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        effortId:
+          type: [string, 'null']
+          format: uuid
     CreateTask:
       type: object
       required: [title]
@@ -209,6 +447,21 @@ components:
           description: Required and must contain at least one non-whitespace character.
         description:
           type: [string, 'null']
+        effortId:
+          type: [string, 'null']
+          format: uuid
+          description: Omit to create a standalone task.
+    AssignTaskToEffort:
+      type: object
+      required: [effortId, expectedVersion]
+      properties:
+        effortId:
+          type: string
+          format: uuid
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 1
     UpdateTaskStatus:
       type: object
       required: [status, expectedVersion]
@@ -228,26 +481,17 @@ components:
           minLength: 1
           description: Plain text containing at least one non-whitespace character.
     Task:
-      type: object
-      required: [id, title, description, status, version, activity]
-      properties:
-        id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        description:
-          type: [string, 'null']
-        status:
-          $ref: '#/components/schemas/Status'
-        version:
-          type: integer
-          format: int64
-          minimum: 1
-        activity:
-          type: array
-          items:
-            $ref: '#/components/schemas/Note'
+      allOf:
+        - $ref: '#/components/schemas/TaskSummary'
+        - type: object
+          required: [description, activity]
+          properties:
+            description:
+              type: [string, 'null']
+            activity:
+              type: array
+              items:
+                $ref: '#/components/schemas/Note'
     Note:
       type: object
       required: [id, taskId, body, author, createdAt]

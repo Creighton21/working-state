@@ -20,25 +20,53 @@ class TaskStore {
         this.jdbc = jdbc;
     }
 
-    Task create(String title, String description) {
+    Task create(String title, String description, String effortId) {
         String id = UUID.randomUUID().toString();
-        jdbc.sql("""
-                INSERT INTO tasks (id, title, description, status, version)
-                VALUES (:id, :title, :description, 'todo', 1)
+        int inserted = jdbc.sql("""
+                INSERT INTO tasks (id, title, description, status, version, effort_id)
+                SELECT :id, :title, :description, 'todo', 1, :effortId
+                WHERE :effortId IS NULL OR EXISTS (SELECT 1 FROM efforts WHERE id = :effortId)
                 """)
                 .param("id", id)
                 .param("title", title)
                 .param("description", description, Types.VARCHAR)
+                .param("effortId", effortId, Types.VARCHAR)
                 .update();
-        return new Task(id, title, description, "todo", 1, List.of());
+        if (inserted == 0) throw new ApiException(HttpStatus.NOT_FOUND, "Effort was not found.");
+        return new Task(id, title, description, "todo", 1, effortId, List.of());
+    }
+
+    List<TaskSummary> listStandalone() {
+        return jdbc.sql("""
+                SELECT id, title, status, version, effort_id
+                FROM tasks WHERE effort_id IS NULL ORDER BY title, id
+                """)
+                .query((row, number) -> summary(row))
+                .list();
+    }
+
+    List<TaskSummary> listForEffort(String effortId) {
+        return jdbc.sql("""
+                SELECT id, title, status, version, effort_id
+                FROM tasks WHERE effort_id = :effortId ORDER BY title, id
+                """)
+                .param("effortId", effortId)
+                .query((row, number) -> summary(row))
+                .list();
+    }
+
+    private static TaskSummary summary(ResultSet row) throws SQLException {
+        return new TaskSummary(row.getString("id"), row.getString("title"), row.getString("status"),
+                row.getLong("version"), row.getString("effort_id"));
     }
 
     @Transactional
     Task get(String id) {
-        Task task = jdbc.sql("SELECT id, title, description, status, version FROM tasks WHERE id = :id")
+        Task task = jdbc.sql("SELECT id, title, description, status, version, effort_id FROM tasks WHERE id = :id")
                 .param("id", id)
                 .query((row, number) -> new Task(row.getString("id"), row.getString("title"),
-                        row.getString("description"), row.getString("status"), row.getLong("version"), List.of()))
+                        row.getString("description"), row.getString("status"), row.getLong("version"),
+                        row.getString("effort_id"), List.of()))
                 .optional()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Task was not found."));
         List<Note> activity = jdbc.sql("""
@@ -51,7 +79,30 @@ class TaskStore {
                 .query((row, number) -> new Note(row.getString("id"), row.getString("task_id"), row.getString("body"),
                         author(row), Instant.ofEpochMilli(row.getLong("created_at"))))
                 .list();
-        return new Task(task.id(), task.title(), task.description(), task.status(), task.version(), activity);
+        return new Task(task.id(), task.title(), task.description(), task.status(), task.version(), task.effortId(), activity);
+    }
+
+    @Transactional
+    Task assignEffort(String id, String effortId, long expectedVersion) {
+        int updated = jdbc.sql("""
+                UPDATE tasks SET effort_id = :effortId, version = version + 1
+                WHERE id = :id AND version = :version AND effort_id IS NULL
+                    AND EXISTS (SELECT 1 FROM efforts WHERE id = :effortId)
+                """)
+                .param("effortId", effortId)
+                .param("id", id)
+                .param("version", expectedVersion)
+                .update();
+        Task task = get(id);
+        if (updated == 0) {
+            boolean effortExists = jdbc.sql("SELECT EXISTS (SELECT 1 FROM efforts WHERE id = :id)")
+                    .param("id", effortId)
+                    .query(Boolean.class)
+                    .single();
+            if (!effortExists) throw new ApiException(HttpStatus.NOT_FOUND, "Effort was not found.");
+            throw new ApiException(HttpStatus.CONFLICT, "Task version or membership changed. Fetch the task before retrying.");
+        }
+        return task;
     }
 
     @Transactional
@@ -122,7 +173,10 @@ class TaskStore {
                 : line.substring(0, line.offsetByCodePoints(0, maxLength - 1)).stripTrailing() + "…";
     }
 
-    record Task(String id, String title, String description, String status, long version, List<Note> activity) {}
+    record Task(String id, String title, String description, String status, long version, String effortId,
+                List<Note> activity) {}
+
+    record TaskSummary(String id, String title, String status, long version, String effortId) {}
 
     record Note(String id, String taskId, String body, WorkspaceIdentity author, Instant createdAt) {}
 

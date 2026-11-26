@@ -69,6 +69,23 @@ WORKSPACE_DATA_DIR=/tmp/working-state-restore \
   java -jar backend/target/working-state-0.1.0-SNAPSHOT.jar --server.port=8081
 ```
 
+### Upgrade to the efforts release
+
+Stop the previous release so the backup includes every committed write. Use the SQLite backup command above with a dedicated pre-upgrade backup filename, and run `PRAGMA integrity_check;` against that file. Start the new release with the same data directory. It applies migration V004 automatically. Check that existing tasks appear under Standalone and that their saved links and notes still open.
+
+To roll back, stop the new release and retain its data directory for recovery. Restore the pre-upgrade backup into an empty directory using the steps above. Point the previous release at the restored directory and restart it. The previous release requires the V003 database, and the restored snapshot contains writes through the time of the backup.
+
+## Handoff smoke check
+
+After packaging the app, install the Playwright Chromium browser and run the smoke check from the repository root.
+
+```sh
+(cd web && npx playwright install chromium)
+npm --prefix web run smoke:handoff
+```
+
+The command uses Java from `JAVA_HOME` or `PATH`. Pass a jar path after `--` to check a different packaged build. The check starts a loopback server with a temporary database, creates a task through the browser, changes its status and posts two notes with an agent token, then verifies that Home opens the older note. It stops the server and removes the temporary workspace when it finishes.
+
 ## Agent REST API
 
 The workspace publishes its OpenAPI 3.1 contract at `/api/v1/openapi.yaml`.
@@ -87,6 +104,26 @@ curl -fsS "$WORKSPACE_URL/api/v1/tasks" \
   -H "Authorization: Bearer $WORKSPACE_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"title":"Review backup restore","description":"Verify that previous notes are present."}'
+```
+
+List standalone tasks with `GET /api/v1/tasks?scope=standalone`. A task response includes `effortId` with a null value for standalone tasks. To create a task in an effort, include `"effortId":"EFFORT_ID"` in the creation body. An unknown effort returns `404 Not Found`.
+
+Create an effort with a title and optional description. The response returns its ID and zero completed tasks. Use `GET /api/v1/efforts` to list efforts and `GET /api/v1/efforts/EFFORT_ID` to read the current completion count, status, and member tasks.
+
+```sh
+curl -fsS "$WORKSPACE_URL/api/v1/efforts" \
+  -H "Authorization: Bearer $WORKSPACE_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Restore verification","description":"Confirm the backup retains task activity."}'
+```
+
+To assign an existing standalone task, fetch its version and send it with the destination ID. Assignment advances the version and preserves the task URL, status, and notes. A missing task or effort returns `404 Not Found`. A stale version or existing membership returns `409 Conflict`. Fetch the task again to see its current version and membership.
+
+```sh
+curl -fsS -X PATCH "$WORKSPACE_URL/api/v1/tasks/TASK_ID/effort" \
+  -H "Authorization: Bearer $WORKSPACE_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"effortId":"EFFORT_ID","expectedVersion":1}'
 ```
 
 Fetch the task before changing its status and send that version as `expectedVersion`. The accepted statuses are `todo`, `in_progress`, and `done`. A successful update returns the task with its advanced version. If another writer changed the version, the API returns `409 Conflict`. Fetch the task again before deciding whether to retry.

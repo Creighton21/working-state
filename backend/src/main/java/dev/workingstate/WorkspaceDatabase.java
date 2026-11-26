@@ -23,7 +23,8 @@ class WorkspaceDatabase {
     private static final List<String> MIGRATIONS = List.of(
             "V001__tasks.sql",
             "V002__task_activity.sql",
-            "V003__agent_credentials.sql");
+            "V003__agent_credentials.sql",
+            "V004__efforts.sql");
 
     @Bean
     DataSource dataSource(@Value("${workspace.data-dir}") Path dataDirectory) throws IOException, SQLException {

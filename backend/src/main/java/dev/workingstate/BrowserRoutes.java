@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 @Controller
 class BrowserRoutes {
-    @GetMapping({"/", "/tasks/{taskId}"})
+    @GetMapping({"/", "/standalone", "/efforts", "/efforts/{effortId}", "/tasks/{taskId}"})
     String workspace() {
         return "forward:/index.html";
     }
