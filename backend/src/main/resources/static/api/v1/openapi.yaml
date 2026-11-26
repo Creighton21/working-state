@@ -1,0 +1,309 @@
+openapi: 3.1.0
+info:
+  title: Working State
+  version: '1.0'
+  description: Standalone tasks and attributed work notes in a self-hosted workspace.
+servers:
+  - url: /
+security:
+  - agentBearer: []
+  - ownerSession: []
+paths:
+  /api/v1/tasks:
+    post:
+      operationId: createTask
+      summary: Create a standalone task
+      security:
+        - agentBearer: []
+        - ownerSession: []
+          sessionCsrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTask'
+      responses:
+        '201':
+          description: Standalone task created with status todo and version 1.
+          headers:
+            Location:
+              description: Path to the created task in the API.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      operationId: getTask
+      summary: Get a task and its activity
+      responses:
+        '200':
+          $ref: '#/components/responses/Task'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/TaskNotFound'
+    patch:
+      operationId: updateTaskStatus
+      summary: Update a task status when its version matches
+      security:
+        - agentBearer: []
+        - ownerSession: []
+          sessionCsrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskStatus'
+      responses:
+        '200':
+          $ref: '#/components/responses/Task'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TaskNotFound'
+        '409':
+          description: The expected version is stale. Fetch the task again before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/tasks/{taskId}/activity:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      operationId: appendTaskNote
+      summary: Append an attributed note without changing the task version
+      security:
+        - agentBearer: []
+        - ownerSession: []
+          sessionCsrf: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendTaskNote'
+      responses:
+        '201':
+          description: Note created with the authenticated author and server timestamp.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/TaskNotFound'
+  /api/v1/activity:
+    get:
+      operationId: listRecentActivity
+      summary: List the newest work notes across tasks
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 3
+            default: 3
+      responses:
+        '200':
+          description: Recent notes, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecentNote'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    agentBearer:
+      type: http
+      scheme: bearer
+      description: Revocable token issued for one agent installation.
+    ownerSession:
+      type: apiKey
+      in: cookie
+      name: WORKSPACE_SESSION
+    sessionCsrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-TOKEN
+      description: Browser session token returned by GET /api/v1/session.
+  parameters:
+    TaskId:
+      in: path
+      name: taskId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Task:
+      description: Task with its current version and activity in newest-first order.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Task'
+    InvalidInput:
+      description: The request failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: An owner session or active agent credential is required.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The owner session requires a valid CSRF token for this write.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TaskNotFound:
+      description: No task has this ID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Status:
+      type: string
+      enum: [todo, in_progress, done]
+    CreateTask:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Required and must contain at least one non-whitespace character.
+        description:
+          type: [string, 'null']
+    UpdateTaskStatus:
+      type: object
+      required: [status, expectedVersion]
+      properties:
+        status:
+          $ref: '#/components/schemas/Status'
+        expectedVersion:
+          type: integer
+          format: int64
+          minimum: 1
+    AppendTaskNote:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          description: Plain text containing at least one non-whitespace character.
+    Task:
+      type: object
+      required: [id, title, description, status, version, activity]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/Status'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
+    Note:
+      type: object
+      required: [id, taskId, body, author, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        body:
+          type: string
+        author:
+          $ref: '#/components/schemas/Author'
+        createdAt:
+          type: string
+          format: date-time
+    RecentNote:
+      type: object
+      required: [id, taskId, taskTitle, excerpt, author, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        taskId:
+          type: string
+          format: uuid
+        taskTitle:
+          type: string
+        excerpt:
+          type: string
+          maxLength: 160
+        author:
+          $ref: '#/components/schemas/Author'
+        createdAt:
+          type: string
+          format: date-time
+    Author:
+      type: object
+      required: [id, name, type]
+      properties:
+        id:
+          type: string
+          description: Stable installation ID, or owner for the workspace owner.
+        name:
+          type: string
+        type:
+          type: string
+          enum: [owner, agent]
+    Error:
+      type: object
+      required: [status, error, message]
+      properties:
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
